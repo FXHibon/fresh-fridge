@@ -1,0 +1,1 @@
+{"name":"Fresh Fridge","description":"Track food expiry dates and get AI-powered recipe suggestions to minimize waste.","requestFramePermissions":["camera"],"majorCapabilities":["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]}

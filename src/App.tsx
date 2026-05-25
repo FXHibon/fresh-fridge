@@ -1,0 +1,471 @@
+import React, { useState, useEffect } from 'react';
+import { v4 as uuidv4 } from 'uuid';
+import { differenceInDays, parseISO, format, formatDistanceToNow, addDays, isPast, startOfDay } from 'date-fns';
+import { 
+  Apple, Carrot, Milk, Beef, Wheat, Package, 
+  Plus, Trash2, X, Sparkles, ChefHat, AlertTriangle, Info, Camera, Loader2 
+} from 'lucide-react';
+import { FoodItem, RecipeSuggestion } from './types';
+import { motion, AnimatePresence } from 'motion/react';
+
+const CATEGORIES = [
+  { name: 'Produce', icon: Apple, color: 'text-green-500', bg: 'bg-green-100' },
+  { name: 'Dairy', icon: Milk, color: 'text-blue-500', bg: 'bg-blue-100' },
+  { name: 'Meat', icon: Beef, color: 'text-red-500', bg: 'bg-red-100' },
+  { name: 'Pantry', icon: Wheat, color: 'text-amber-500', bg: 'bg-amber-100' },
+  { name: 'Other', icon: Package, color: 'text-slate-500', bg: 'bg-slate-100' },
+];
+
+export default function App() {
+  const [items, setItems] = useState<FoodItem[]>(() => {
+    try {
+      const saved = localStorage.getItem('fridge-items');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const [isAdding, setIsAdding] = useState(false);
+  const [newItemName, setNewItemName] = useState('');
+  const [newItemCategory, setNewItemCategory] = useState(CATEGORIES[0].name);
+  const [newItemExpiryDays, setNewItemExpiryDays] = useState('7');
+
+  const [recipes, setRecipes] = useState<RecipeSuggestion[] | null>(null);
+  const [isLoadingRecipes, setIsLoadingRecipes] = useState(false);
+  const [recipeError, setRecipeError] = useState('');
+  
+  const [isScanning, setIsScanning] = useState(false);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    localStorage.setItem('fridge-items', JSON.stringify(items));
+  }, [items]);
+
+  const handleAddItem = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newItemName.trim()) return;
+
+    const expiryDate = addDays(startOfDay(new Date()), parseInt(newItemExpiryDays) || 0).toISOString();
+    
+    const newItem: FoodItem = {
+      id: uuidv4(),
+      name: newItemName.trim(),
+      category: newItemCategory,
+      addedDate: new Date().toISOString(),
+      expiryDate,
+    };
+
+    setItems([...items, newItem]);
+    setIsAdding(false);
+    setNewItemName('');
+    setNewItemExpiryDays('7');
+  };
+
+  const handleScanClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Reset input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+
+    setIsScanning(true);
+    
+    try {
+      // Read file as base64
+      const reader = new FileReader();
+      const base64Data = await new Promise<string>((resolve, reject) => {
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+
+      const response = await fetch('/api/scan-groceries', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageBase64: base64Data }),
+      });
+
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to scan image');
+      }
+
+      if (data.items && Array.isArray(data.items)) {
+        const newFoodItems = data.items.map((item: any) => ({
+          id: uuidv4(),
+          name: item.name,
+          category: CATEGORIES.some(c => c.name === item.category) ? item.category : 'Other',
+          addedDate: new Date().toISOString(),
+          expiryDate: addDays(startOfDay(new Date()), item.expiryDays || 7).toISOString(),
+        }));
+        
+        setItems(prev => [...prev, ...newFoodItems]);
+      }
+    } catch (error) {
+      console.error('Error scanning groceries:', error);
+      alert('Failed to scan groceries. Please ensure the image is clear and you have configured the Gemini API key.');
+    } finally {
+      setIsScanning(false);
+    }
+  };
+
+  const handleDeleteItem = (id: string) => {
+    setItems(items.filter(item => item.id !== id));
+  };
+
+  const generateRecipes = async () => {
+    if (items.length === 0) return;
+    
+    setIsLoadingRecipes(true);
+    setRecipeError('');
+    setRecipes(null);
+
+    const mappedItems = items.map(item => ({
+      name: item.name,
+      daysUntilExpiry: differenceInDays(parseISO(item.expiryDate), startOfDay(new Date())),
+    }));
+
+    try {
+      const response = await fetch('/api/recipes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items: mappedItems }),
+      });
+
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to fetch recipes');
+      }
+
+      setRecipes(data.recipes);
+    } catch (err: any) {
+      setRecipeError(err.message || 'Error fetching recipes. Please ensure your GEMINI_API_KEY is configured in the environment.');
+    } finally {
+      setIsLoadingRecipes(false);
+    }
+  };
+
+  // Sort items by expiry date (soonest first)
+  const sortedItems = [...items].sort((a, b) => {
+    return new Date(a.expiryDate).getTime() - new Date(b.expiryDate).getTime();
+  });
+
+  const getStatusColor = (expiryDate: string) => {
+    const days = differenceInDays(parseISO(expiryDate), startOfDay(new Date()));
+    if (days < 0) return 'text-red-600 bg-red-100 border-red-200';
+    if (days <= 2) return 'text-orange-600 bg-orange-100 border-orange-200';
+    if (days <= 5) return 'text-amber-600 bg-amber-50 border-amber-200';
+    return 'text-green-600 bg-green-50 border-green-200';
+  };
+
+  return (
+    <div className="min-h-screen p-4 md:p-8 max-w-6xl mx-auto space-y-8">
+      <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight text-slate-900 flex items-center gap-2">
+            <span className="text-emerald-500">Fresh</span> Fridge
+          </h1>
+          <p className="text-slate-500 mt-1">Track expiry dates and minimize food waste.</p>
+        </div>
+        
+        <div className="flex flex-wrap gap-2 md:gap-3">
+          <input 
+            type="file" 
+            accept="image/*" 
+            capture="environment"
+            ref={fileInputRef}
+            className="hidden"
+            onChange={handleFileChange}
+          />
+          
+          <button 
+            onClick={handleScanClick}
+            disabled={isScanning}
+            className="px-4 py-2 font-medium text-slate-700 bg-white border border-slate-200 rounded-lg shadow-sm hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 transition-colors"
+          >
+            {isScanning ? <Loader2 className="w-4 h-4 animate-spin" /> : <Camera className="w-4 h-4" />}
+            {isScanning ? 'Scanning...' : 'Scan'}
+          </button>
+
+          <button 
+            onClick={generateRecipes}
+            disabled={items.length === 0 || isLoadingRecipes}
+            className="px-4 py-2 font-medium text-white bg-indigo-600 rounded-lg shadow-sm hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 transition-colors"
+          >
+            {isLoadingRecipes ? (
+              <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1, ease: "linear" }}>
+                <Sparkles className="w-4 h-4" />
+              </motion.div>
+            ) : (
+              <ChefHat className="w-4 h-4" />
+            )}
+            AI Recipes
+          </button>
+          
+          <button 
+            onClick={() => setIsAdding(true)}
+            className="px-4 py-2 font-medium text-emerald-700 bg-emerald-100 rounded-lg hover:bg-emerald-200 flex items-center gap-2 transition-colors"
+          >
+            <Plus className="w-4 h-4" /> Add Food
+          </button>
+        </div>
+      </header>
+
+      {/* Main Content Layout */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
+        
+        {/* Left Column: Inventory List */}
+        <div className="lg:col-span-2 space-y-6">
+          <div className="bg-white border rounded-2xl shadow-sm p-6 overflow-hidden">
+            <h2 className="text-xl font-semibold mb-6 flex items-center gap-2">
+              <Package className="w-5 h-5 text-slate-400" /> Current Inventory
+            </h2>
+            
+            {sortedItems.length === 0 ? (
+              <div className="text-center py-12 text-slate-500">
+                <Package className="w-12 h-12 mx-auto text-slate-300 mb-4" />
+                <p>Your fridge is empty!</p>
+                <button onClick={() => setIsAdding(true)} className="text-emerald-600 font-medium hover:underline mt-2">
+                  Add some items
+                </button>
+              </div>
+            ) : (
+              <div className="grid gap-3">
+                <AnimatePresence>
+                  {sortedItems.map(item => {
+                    const mappedCat = CATEGORIES.find(c => c.name === item.category) || CATEGORIES[4];
+                    const Icon = mappedCat.icon;
+                    const days = differenceInDays(parseISO(item.expiryDate), startOfDay(new Date()));
+                    const urgency = days < 0 ? 'Expired' : days === 0 ? 'Expires Today' : `Expires in ${days} day${days === 1 ? '' : 's'}`;
+
+                    return (
+                      <motion.div
+                        key={item.id}
+                        layout
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, scale: 0.95 }}
+                        className="flex items-center justify-between p-4 rounded-xl border border-slate-100 bg-slate-50/50 group hover:shadow-sm transition-all"
+                      >
+                        <div className="flex items-center gap-4">
+                          <div className={`p-3 rounded-xl ${mappedCat.bg} ${mappedCat.color}`}>
+                            <Icon className="w-6 h-6" />
+                          </div>
+                          <div>
+                            <h3 className="font-semibold text-slate-900">{item.name}</h3>
+                            <div className="flex items-center gap-2 mt-1">
+                              <span className={`text-xs font-medium px-2 py-0.5 rounded-full border ${getStatusColor(item.expiryDate)}`}>
+                                {urgency}
+                              </span>
+                              <span className="text-xs text-slate-400">
+                                {format(parseISO(item.expiryDate), 'MMM do')}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                        <button 
+                          onClick={() => handleDeleteItem(item.id)}
+                          className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
+                          title="Remove item"
+                        >
+                          <Trash2 className="w-5 h-5" />
+                        </button>
+                      </motion.div>
+                    );
+                  })}
+                </AnimatePresence>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Right Column: AI Recipe Panel */}
+        <div className="space-y-6">
+          <div className="bg-indigo-50/50 border border-indigo-100 rounded-2xl p-6 shadow-sm">
+            <h2 className="text-xl font-semibold mb-2 flex items-center gap-2 text-indigo-900">
+              <ChefHat className="w-5 h-5" /> Recipe Suggestions
+            </h2>
+            <p className="text-sm text-indigo-700/70 mb-6">
+              AI suggests what to cook to minimize waste based on items expiring soon.
+            </p>
+
+            {recipeError && (
+              <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-xl text-sm mb-4">
+                <AlertTriangle className="w-4 h-4 inline mr-2" />
+                {recipeError}
+              </div>
+            )}
+
+            {!recipes && !isLoadingRecipes && !recipeError && (
+              <div className="text-center py-8">
+                <Sparkles className="w-8 h-8 text-indigo-300 mx-auto mb-3" />
+                <p className="text-sm text-indigo-600 font-medium pb-2">Click "AI Recipes" to generate ideas.</p>
+              </div>
+            )}
+
+            {isLoadingRecipes && (
+              <div className="space-y-4">
+                {[1, 2].map(i => (
+                  <div key={i} className="animate-pulse bg-white p-4 rounded-xl border border-indigo-100 space-y-3">
+                    <div className="h-5 bg-indigo-100 rounded w-2/3" />
+                    <div className="h-4 bg-indigo-50 rounded w-full" />
+                    <div className="h-4 bg-indigo-50 rounded w-4/5" />
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {recipes && (
+              <div className="space-y-4">
+                {recipes.map((recipe, idx) => (
+                  <motion.div 
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: idx * 0.1 }}
+                    key={idx} 
+                    className="bg-white p-5 rounded-xl border border-indigo-100 shadow-sm"
+                  >
+                    <div className="flex justify-between items-start mb-2">
+                      <h3 className="font-semibold text-slate-800">{recipe.title}</h3>
+                      <span className={`text-[10px] uppercase tracking-wider font-bold px-2 py-1 rounded-sm ${
+                        recipe.difficulty === 'Easy' ? 'bg-green-100 text-green-700' :
+                        recipe.difficulty === 'Medium' ? 'bg-amber-100 text-amber-700' :
+                        'bg-red-100 text-red-700'
+                      }`}>
+                        {recipe.difficulty}
+                      </span>
+                    </div>
+                    
+                    <p className="text-sm text-slate-600 mb-4">{recipe.description}</p>
+                    
+                    <div className="mb-4">
+                      <h4 className="text-xs font-semibold text-slate-900 uppercase tracking-wider mb-2">Uses these ingredients:</h4>
+                      <div className="flex flex-wrap gap-1">
+                        {recipe.ingredientsUsed.map((ing, i) => (
+                          <span key={i} className="text-xs bg-slate-100 text-slate-700 px-2 py-1 rounded-md">
+                            {ing}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div>
+                      <h4 className="text-xs font-semibold text-slate-900 uppercase tracking-wider mb-2 flex items-center gap-1">
+                        <Info className="w-3 h-3 text-slate-400" /> Instructions:
+                      </h4>
+                      <ol className="list-decimal list-inside space-y-1">
+                        {recipe.instructions.map((step, i) => (
+                          <li key={i} className="text-sm text-slate-600 leading-relaxed pl-1">
+                            <span className="pl-1">{step}</span>
+                          </li>
+                        ))}
+                      </ol>
+                    </div>
+                  </motion.div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Add Item Modal */}
+      <AnimatePresence>
+        {isAdding && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+            <motion.div 
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden"
+            >
+              <div className="flex justify-between items-center p-6 bg-slate-50 border-b border-slate-100">
+                <h3 className="text-lg font-semibold text-slate-900">Add to Fridge</h3>
+                <button onClick={() => setIsAdding(false)} className="text-slate-400 hover:text-slate-600">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              
+              <form onSubmit={handleAddItem} className="p-6 space-y-5">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Item Name</label>
+                  <input
+                    type="text"
+                    required
+                    value={newItemName}
+                    onChange={(e) => setNewItemName(e.target.value)}
+                    placeholder="e.g. Greek Yogurt"
+                    className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                    autoFocus
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Category</label>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                    {CATEGORIES.map(cat => (
+                      <button
+                        type="button"
+                        key={cat.name}
+                        onClick={() => setNewItemCategory(cat.name)}
+                        className={`flex items-center gap-2 p-2 rounded-lg text-sm transition-all border ${
+                          newItemCategory === cat.name 
+                            ? `${cat.bg} ${cat.color} border-transparent font-medium shadow-sm` 
+                            : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                        }`}
+                      >
+                        <cat.icon className="w-4 h-4" />
+                        {cat.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Expires in (days)</label>
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="number"
+                      min="0"
+                      required
+                      value={newItemExpiryDays}
+                      onChange={(e) => setNewItemExpiryDays(e.target.value)}
+                      className="w-24 px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                    />
+                    <span className="text-sm text-slate-500">days</span>
+                  </div>
+                </div>
+
+                <div className="pt-4 border-t border-slate-100 flex justify-end gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setIsAdding(false)}
+                    className="px-4 py-2 text-slate-600 font-medium hover:bg-slate-100 rounded-lg transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-4 py-2 font-medium text-white bg-emerald-600 rounded-lg shadow-sm hover:bg-emerald-700 transition-colors"
+                  >
+                    Save Item
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+

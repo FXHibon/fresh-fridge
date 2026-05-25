@@ -17,7 +17,7 @@ app.post('/api/recipes', async (req, res) => {
     }
 
     const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-    
+
     const ingredientsList = items.map(
       (item) => `${item.name} (expires in ${item.daysUntilExpiry} days)`
     ).join(', ');
@@ -34,7 +34,7 @@ app.post('/api/recipes', async (req, res) => {
     Do not include markdown formatting or backticks around the JSON. Return ONLY the raw JSON string.`;
 
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
+      model: 'gemini-3.5-flash',
       contents: prompt,
       config: {
         responseMimeType: 'application/json',
@@ -56,7 +56,7 @@ app.post('/api/scan-groceries', async (req, res) => {
     }
 
     const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-    
+
     // Extract base64 part, removing data URI prefix if present
     const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, '');
 
@@ -75,7 +75,7 @@ app.post('/api/scan-groceries', async (req, res) => {
     Do not include markdown formatting or backticks around the JSON. Return ONLY the raw JSON string.`;
 
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
+      model: 'gemini-3.5-flash',
       contents: [
         {
           inlineData: {

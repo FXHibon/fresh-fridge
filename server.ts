@@ -2,6 +2,25 @@ import express from 'express';
 import path from 'path';
 import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI } from '@google/genai';
+import client from 'prom-client';
+
+// Enable default metrics collection (CPU, Memory, etc.)
+client.collectDefaultMetrics();
+
+// Define a histogram for HTTP request durations
+const httpRequestDurationSeconds = new client.Histogram({
+  name: 'http_request_duration_seconds',
+  help: 'Duration of HTTP requests in seconds',
+  labelNames: ['method', 'route', 'status_code'],
+  buckets: [0.1, 0.3, 0.5, 0.7, 1, 3, 5, 7, 10]
+});
+
+// Counter for request totals
+const httpRequestsTotal = new client.Counter({
+  name: 'http_requests_total',
+  help: 'Total number of HTTP requests',
+  labelNames: ['method', 'route', 'status_code']
+});
 
 const app = express();
 const PORT = 3000;
@@ -9,6 +28,53 @@ const isDebug = process.env.LOG_LEVEL === 'DEBUG';
 
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
+
+// Metrics collection middleware
+app.use((req, res, next) => {
+  const start = process.hrtime();
+
+  res.on('finish', () => {
+    const diff = process.hrtime(start);
+    const durationInSeconds = diff[0] + diff[1] / 1e9;
+
+    // Use req.route.path if available (e.g. /api/recipes).
+    // If not (Vite routes, static files, 404s), use req.path for API routes,
+    // and a generic bucket for static assets to keep metric cardinality low.
+    let route = 'unknown';
+    if (req.route) {
+      route = req.route.path;
+    } else if (req.path.startsWith('/api')) {
+      route = req.path;
+    } else {
+      route = 'static_assets';
+    }
+
+    // Exclude /metrics endpoint itself from stats to avoid telemetry loops
+    if (req.path === '/metrics') {
+      return;
+    }
+
+    httpRequestDurationSeconds
+      .labels(req.method, route, res.statusCode.toString())
+      .observe(durationInSeconds);
+
+    httpRequestsTotal
+      .labels(req.method, route, res.statusCode.toString())
+      .inc();
+  });
+
+  next();
+});
+
+// Prometheus metrics endpoint
+app.get('/metrics', async (req, res) => {
+  try {
+    res.set('Content-Type', client.register.contentType);
+    res.end(await client.register.metrics());
+  } catch (err) {
+    res.status(500).end(err);
+  }
+});
 
 app.post('/api/recipes', async (req, res) => {
   try {

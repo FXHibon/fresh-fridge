@@ -1,0 +1,34 @@
+# Grafana Provisioning Configuration File
+# Place this file or similar configurations in your Grafana provisioning directories
+# (typically /etc/grafana/provisioning/dashboards/ and /etc/grafana/provisioning/datasources/)
+
+apiVersion: 1
+
+# 1. Prometheus Datasource Configuration
+# Save this section in your datasources provisioning file (e.g. datasources.yml)
+datasources:
+  - name: prometheus
+    type: prometheus
+    access: proxy
+    url: http://localhost:9090  # Replace with your actual Prometheus endpoint if different
+    isDefault: true
+    jsonData:
+      httpMethod: POST
+      manageAlerts: true
+      prometheusType: Prometheus
+      cacheLevel: 'High'
+    editable: true
+
+# 2. Dashboard Provider Configuration
+# Save this section in your dashboards provisioning file (e.g. dashboards.yml)
+providers:
+  - name: 'Fresh Fridge API Observability'
+    orgId: 1
+    folder: 'Fresh Fridge'
+    type: file
+    disableDeletion: false
+    editable: true
+    updateIntervalSeconds: 10
+    options:
+      # Absolute path to the directory containing grafana_dashboard.json
+      path: /var/lib/grafana/dashboards

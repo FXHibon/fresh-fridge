@@ -13,3 +13,9 @@ export interface RecipeSuggestion {
   instructions: string[];
   difficulty: "Easy" | "Medium" | "Hard";
 }
+
+export interface SavedRecipe extends RecipeSuggestion {
+  id: string;
+  savedAt: string;
+}
+

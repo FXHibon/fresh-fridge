@@ -3,9 +3,10 @@ import { v4 as uuidv4 } from 'uuid';
 import { differenceInDays, parseISO, format, formatDistanceToNow, addDays, isPast, startOfDay } from 'date-fns';
 import { 
   Apple, Carrot, Milk, Beef, Wheat, Package, 
-  Plus, Trash2, X, Sparkles, ChefHat, AlertTriangle, Info, Camera, Loader2 
+  Plus, Trash2, X, Sparkles, ChefHat, AlertTriangle, Info, Camera, Loader2,
+  Bookmark, ChevronDown, ChevronUp
 } from 'lucide-react';
-import { FoodItem, RecipeSuggestion } from './types';
+import { FoodItem, RecipeSuggestion, SavedRecipe } from './types';
 import { motion, AnimatePresence } from 'motion/react';
 
 const CATEGORIES = [
@@ -26,6 +27,15 @@ export default function App() {
     }
   });
 
+  const [savedRecipes, setSavedRecipes] = useState<SavedRecipe[]>(() => {
+    try {
+      const saved = localStorage.getItem('fridge-saved-recipes');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
   const [isAdding, setIsAdding] = useState(false);
   const [newItemName, setNewItemName] = useState('');
   const [newItemCategory, setNewItemCategory] = useState(CATEGORIES[0].name);
@@ -37,10 +47,15 @@ export default function App() {
   
   const [isScanning, setIsScanning] = useState(false);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const [expandedRecipeId, setExpandedRecipeId] = useState<string | null>(null);
 
   useEffect(() => {
     localStorage.setItem('fridge-items', JSON.stringify(items));
   }, [items]);
+
+  useEffect(() => {
+    localStorage.setItem('fridge-saved-recipes', JSON.stringify(savedRecipes));
+  }, [savedRecipes]);
 
   const handleAddItem = (e: React.FormEvent) => {
     e.preventDefault();
@@ -119,6 +134,25 @@ export default function App() {
 
   const handleDeleteItem = (id: string) => {
     setItems(items.filter(item => item.id !== id));
+  };
+
+  const handleSaveRecipe = (recipe: RecipeSuggestion) => {
+    if (savedRecipes.some(r => r.title.toLowerCase() === recipe.title.toLowerCase())) {
+      return;
+    }
+    const newSaved: SavedRecipe = {
+      ...recipe,
+      id: uuidv4(),
+      savedAt: new Date().toISOString()
+    };
+    setSavedRecipes([...savedRecipes, newSaved]);
+  };
+
+  const handleDeleteSavedRecipe = (id: string) => {
+    setSavedRecipes(savedRecipes.filter(r => r.id !== id));
+    if (expandedRecipeId === id) {
+      setExpandedRecipeId(null);
+    }
   };
 
   const generateRecipes = async () => {
@@ -286,6 +320,102 @@ export default function App() {
               </div>
             )}
           </div>
+
+          {/* Saved Recipes Panel */}
+          <div className="bg-white border rounded-2xl shadow-sm p-6 overflow-hidden">
+            <h2 className="text-xl font-semibold mb-6 flex items-center gap-2">
+              <ChefHat className="w-5 h-5 text-indigo-500" /> Saved Recipes
+            </h2>
+            
+            {savedRecipes.length === 0 ? (
+              <div className="text-center py-10 text-slate-500">
+                <ChefHat className="w-12 h-12 mx-auto text-slate-300 mb-3" />
+                <p>No saved recipes yet.</p>
+                <p className="text-xs text-slate-400 mt-1">Generate recipes on the right and click the bookmark icon to save them!</p>
+              </div>
+            ) : (
+              <div className="grid gap-3">
+                <AnimatePresence>
+                  {savedRecipes.map(recipe => {
+                    const isExpanded = expandedRecipeId === recipe.id;
+                    return (
+                      <motion.div
+                        key={recipe.id}
+                        layout
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, scale: 0.95 }}
+                        className="border border-slate-100 rounded-xl bg-slate-50/50 hover:shadow-sm transition-all overflow-hidden"
+                      >
+                        <div 
+                          className="flex items-center justify-between p-4 cursor-pointer select-none"
+                          onClick={() => setExpandedRecipeId(isExpanded ? null : recipe.id)}
+                        >
+                          <div className="flex items-center gap-3">
+                            <span className={`text-[10px] uppercase tracking-wider font-bold px-2 py-1 rounded-sm ${
+                              recipe.difficulty === 'Easy' ? 'bg-green-100 text-green-700' :
+                              recipe.difficulty === 'Medium' ? 'bg-amber-100 text-amber-700' :
+                              'bg-red-100 text-red-700'
+                            }`}>
+                              {recipe.difficulty}
+                            </span>
+                            <h3 className="font-semibold text-slate-900">{recipe.title}</h3>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteSavedRecipe(recipe.id);
+                              }}
+                              className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                              title="Delete saved recipe"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                            {isExpanded ? (
+                              <ChevronUp className="w-5 h-5 text-slate-400" />
+                            ) : (
+                              <ChevronDown className="w-5 h-5 text-slate-400" />
+                            )}
+                          </div>
+                        </div>
+                        
+                        {isExpanded && (
+                          <div className="px-4 pb-4 border-t border-slate-100/50 pt-4 space-y-4 bg-white">
+                            <p className="text-sm text-slate-600">{recipe.description}</p>
+                            
+                            <div>
+                              <h4 className="text-xs font-semibold text-slate-900 uppercase tracking-wider mb-2">Used ingredients:</h4>
+                              <div className="flex flex-wrap gap-1">
+                                {recipe.ingredientsUsed.map((ing, i) => (
+                                  <span key={i} className="text-xs bg-slate-100 text-slate-700 px-2 py-1 rounded-md">
+                                    {ing}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                            
+                            <div>
+                              <h4 className="text-xs font-semibold text-slate-900 uppercase tracking-wider mb-2 flex items-center gap-1">
+                                <Info className="w-3 h-3 text-slate-400" /> Instructions:
+                              </h4>
+                              <ol className="list-decimal list-inside space-y-1">
+                                {recipe.instructions.map((step, i) => (
+                                  <li key={i} className="text-sm text-slate-600 leading-relaxed pl-1">
+                                    <span className="pl-1">{step}</span>
+                                  </li>
+                                ))}
+                              </ol>
+                            </div>
+                          </div>
+                        )}
+                      </motion.div>
+                    );
+                  })}
+                </AnimatePresence>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Right Column: AI Recipe Panel */}
@@ -335,14 +465,34 @@ export default function App() {
                     className="bg-white p-5 rounded-xl border border-indigo-100 shadow-sm"
                   >
                     <div className="flex justify-between items-start mb-2">
-                      <h3 className="font-semibold text-slate-800">{recipe.title}</h3>
-                      <span className={`text-[10px] uppercase tracking-wider font-bold px-2 py-1 rounded-sm ${
-                        recipe.difficulty === 'Easy' ? 'bg-green-100 text-green-700' :
-                        recipe.difficulty === 'Medium' ? 'bg-amber-100 text-amber-700' :
-                        'bg-red-100 text-red-700'
-                      }`}>
-                        {recipe.difficulty}
-                      </span>
+                      <h3 className="font-semibold text-slate-800 pr-2">{recipe.title}</h3>
+                      <div className="flex items-center gap-2">
+                        <span className={`text-[10px] uppercase tracking-wider font-bold px-2 py-1 rounded-sm ${
+                          recipe.difficulty === 'Easy' ? 'bg-green-100 text-green-700' :
+                          recipe.difficulty === 'Medium' ? 'bg-amber-100 text-amber-700' :
+                          'bg-red-100 text-red-700'
+                        }`}>
+                          {recipe.difficulty}
+                        </span>
+                        
+                        {(() => {
+                          const isSaved = savedRecipes.some(r => r.title.toLowerCase() === recipe.title.toLowerCase());
+                          return (
+                            <button
+                              onClick={() => handleSaveRecipe(recipe)}
+                              disabled={isSaved}
+                              className={`p-1 rounded-md transition-colors ${
+                                isSaved 
+                                  ? 'text-indigo-600 bg-indigo-50 cursor-default' 
+                                  : 'text-slate-400 hover:text-indigo-600 hover:bg-slate-50'
+                              }`}
+                              title={isSaved ? "Saved to Recipes" : "Save Recipe"}
+                            >
+                              <Bookmark className={`w-4 h-4 ${isSaved ? 'fill-indigo-600' : ''}`} />
+                            </button>
+                          );
+                        })()}
+                      </div>
                     </div>
                     
                     <p className="text-sm text-slate-600 mb-4">{recipe.description}</p>

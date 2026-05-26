@@ -5,6 +5,7 @@ import { GoogleGenAI } from '@google/genai';
 
 const app = express();
 const PORT = 3000;
+const isDebug = process.env.LOG_LEVEL === 'DEBUG';
 
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
@@ -33,6 +34,13 @@ app.post('/api/recipes', async (req, res) => {
     - "difficulty" (string: Easy, Medium, Hard)
     Do not include markdown formatting or backticks around the JSON. Return ONLY the raw JSON string.`;
 
+    console.info(`[Recipe API] Generating recipes using ${items.length} ingredients...`);
+    if (isDebug) {
+      console.debug('[Recipe API] Full Prompt:', prompt);
+      console.debug('[Recipe API] Ingredients payload:', ingredientsList);
+    }
+    const startTime = Date.now();
+
     const response = await ai.models.generateContent({
       model: 'gemini-3.5-flash',
       contents: prompt,
@@ -41,7 +49,14 @@ app.post('/api/recipes', async (req, res) => {
       }
     });
 
-    res.json(JSON.parse(response.text() || '{"recipes": []}'));
+    const duration = Date.now() - startTime;
+    const responseText = response.text || '{"recipes": []}';
+    console.info(`[Recipe API] Successfully generated recipes in ${duration}ms.`);
+    if (isDebug) {
+      console.debug('[Recipe API] Full LLM Response payload:', responseText);
+    }
+
+    res.json(JSON.parse(responseText));
   } catch (error) {
     console.error('Error fetching recipes:', error);
     res.status(500).json({ error: 'Failed to generate recipes' });
@@ -74,6 +89,12 @@ app.post('/api/scan-groceries', async (req, res) => {
     
     Do not include markdown formatting or backticks around the JSON. Return ONLY the raw JSON string.`;
 
+    console.info('[Scan API] Analyzing grocery image...');
+    if (isDebug) {
+      console.debug('[Scan API] Image base64 length:', base64Data.length);
+    }
+    const startTime = Date.now();
+
     const response = await ai.models.generateContent({
       model: 'gemini-3.5-flash',
       contents: [
@@ -90,7 +111,14 @@ app.post('/api/scan-groceries', async (req, res) => {
       }
     });
 
-    res.json(JSON.parse(response.text() || '{"items": []}'));
+    const duration = Date.now() - startTime;
+    const responseText = response.text || '{"items": []}';
+    console.info(`[Scan API] Successfully analyzed image in ${duration}ms.`);
+    if (isDebug) {
+      console.debug('[Scan API] Full LLM Response payload:', responseText);
+    }
+
+    res.json(JSON.parse(responseText));
   } catch (error) {
     console.error('Error scanning groceries:', error);
     res.status(500).json({ error: 'Failed to analyze grocery image' });

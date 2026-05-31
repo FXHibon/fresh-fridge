@@ -31,23 +31,27 @@ const getCategoryTranslationKey = (name: string): keyof typeof translations.en =
 export default function App() {
   const { language, setLanguage, t, dateLocale } = useLanguage();
 
-  const [items, setItems] = useState<FoodItem[]>(() => {
+  // Authentication State
+  const [token, setToken] = useState<string | null>(() => localStorage.getItem('fridge-token'));
+  const [user, setUser] = useState<any | null>(() => {
     try {
-      const saved = localStorage.getItem('fridge-items');
-      return saved ? JSON.parse(saved) : [];
+      const saved = localStorage.getItem('fridge-user');
+      return saved ? JSON.parse(saved) : null;
     } catch {
-      return [];
+      return null;
     }
   });
 
-  const [savedRecipes, setSavedRecipes] = useState<SavedRecipe[]>(() => {
-    try {
-      const saved = localStorage.getItem('fridge-saved-recipes');
-      return saved ? JSON.parse(saved) : [];
-    } catch {
-      return [];
-    }
-  });
+  const [authEmail, setAuthEmail] = useState('');
+  const [authPassword, setAuthPassword] = useState('');
+  const [isSignUp, setIsSignUp] = useState(false);
+  const [isAuthLoading, setIsAuthLoading] = useState(false);
+  const [authError, setAuthError] = useState('');
+
+  // App Data State
+  const [items, setItems] = useState<FoodItem[]>([]);
+  const [savedRecipes, setSavedRecipes] = useState<SavedRecipe[]>([]);
+  const [isInitialLoading, setIsInitialLoading] = useState(false);
 
   const [isAdding, setIsAdding] = useState(false);
   const [newItemName, setNewItemName] = useState('');
@@ -62,32 +66,121 @@ export default function App() {
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   const [expandedRecipeId, setExpandedRecipeId] = useState<string | null>(null);
 
-  useEffect(() => {
-    localStorage.setItem('fridge-items', JSON.stringify(items));
-  }, [items]);
+  // Authenticated fetch helper
+  const fetchWithAuth = async (url: string, options: RequestInit = {}) => {
+    const activeToken = token || localStorage.getItem('fridge-token');
+    const headers = {
+      'Content-Type': 'application/json',
+      ...(activeToken ? { 'Authorization': `Bearer ${activeToken}` } : {}),
+      ...options.headers,
+    };
 
-  useEffect(() => {
-    localStorage.setItem('fridge-saved-recipes', JSON.stringify(savedRecipes));
-  }, [savedRecipes]);
+    const response = await fetch(url, { ...options, headers });
+    
+    if (response.status === 401) {
+      handleSignOut();
+      throw new Error('Session expired. Please sign in again.');
+    }
+    
+    return response;
+  };
 
-  const handleAddItem = (e: React.FormEvent) => {
+  // Sync state from Database
+  useEffect(() => {
+    if (!user || !token) return;
+
+    const loadData = async () => {
+      setIsInitialLoading(true);
+      try {
+        const invRes = await fetchWithAuth('/api/fridge');
+        const invData = await invRes.json();
+        setItems(invData);
+
+        const recRes = await fetchWithAuth('/api/recipes/saved');
+        const recData = await recRes.json();
+        setSavedRecipes(recData);
+      } catch (err) {
+        console.error('Error loading initial data:', err);
+      } finally {
+        setIsInitialLoading(false);
+      }
+    };
+
+    loadData();
+  }, [user, token]);
+
+  const handleAuthSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!authEmail.trim() || !authPassword) return;
+
+    setIsAuthLoading(true);
+    setAuthError('');
+
+    const endpoint = isSignUp ? '/api/auth/signup' : '/api/auth/signin';
+    try {
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: authEmail.toLowerCase().trim(), password: authPassword }),
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to authenticate');
+      }
+
+      localStorage.setItem('fridge-token', data.token);
+      localStorage.setItem('fridge-user', JSON.stringify(data.user));
+
+      setToken(data.token);
+      setUser(data.user);
+      
+      setAuthEmail('');
+      setAuthPassword('');
+    } catch (err: any) {
+      console.error('Auth error:', err);
+      setAuthError(err.message || 'An error occurred during authentication.');
+    } finally {
+      setIsAuthLoading(false);
+    }
+  };
+
+  const handleSignOut = () => {
+    localStorage.removeItem('fridge-token');
+    localStorage.removeItem('fridge-user');
+    setToken(null);
+    setUser(null);
+    setItems([]);
+    setSavedRecipes([]);
+    setRecipes(null);
+  };
+
+  const handleAddItem = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newItemName.trim()) return;
 
     const expiryDate = addDays(startOfDay(new Date()), parseInt(newItemExpiryDays) || 0).toISOString();
     
-    const newItem: FoodItem = {
-      id: uuidv4(),
-      name: newItemName.trim(),
-      category: newItemCategory,
-      addedDate: new Date().toISOString(),
-      expiryDate,
-    };
+    try {
+      const response = await fetchWithAuth('/api/fridge', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: newItemName.trim(),
+          category: newItemCategory,
+          addedDate: new Date().toISOString(),
+          expiryDate,
+        }),
+      });
 
-    setItems([...items, newItem]);
-    setIsAdding(false);
-    setNewItemName('');
-    setNewItemExpiryDays('7');
+      const data = await response.json();
+      setItems([...items, data]);
+      setIsAdding(false);
+      setNewItemName('');
+      setNewItemExpiryDays('7');
+    } catch (err: any) {
+      console.error('Error adding item:', err);
+      alert(err.message || 'Failed to add item.');
+    }
   };
 
   const handleScanClick = () => {
@@ -114,30 +207,34 @@ export default function App() {
         reader.readAsDataURL(file);
       });
 
-      const response = await fetch('/api/scan-groceries', {
+      const response = await fetchWithAuth('/api/scan-groceries', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ imageBase64: base64Data }),
       });
 
       const data = await response.json();
       
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to scan image');
-      }
-
       if (data.items && Array.isArray(data.items)) {
-        const newFoodItems = data.items.map((item: any) => ({
-          id: uuidv4(),
-          name: item.name,
-          category: CATEGORIES.some(c => c.name === item.category) ? item.category : 'Other',
-          addedDate: new Date().toISOString(),
-          expiryDate: addDays(startOfDay(new Date()), item.expiryDays || 7).toISOString(),
-        }));
+        const savedItems = await Promise.all(
+          data.items.map(async (item: any) => {
+            const addedDate = new Date().toISOString();
+            const expiryDate = addDays(startOfDay(new Date()), item.expiryDays || 7).toISOString();
+            const res = await fetchWithAuth('/api/fridge', {
+              method: 'POST',
+              body: JSON.stringify({
+                name: item.name,
+                category: CATEGORIES.some(c => c.name === item.category) ? item.category : 'Other',
+                addedDate,
+                expiryDate,
+              }),
+            });
+            return res.json();
+          })
+        );
         
-        setItems(prev => [...prev, ...newFoodItems]);
+        setItems(prev => [...prev, ...savedItems]);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error scanning groceries:', error);
       alert(t('errScanFailed'));
     } finally {
@@ -145,26 +242,49 @@ export default function App() {
     }
   };
 
-  const handleDeleteItem = (id: string) => {
-    setItems(items.filter(item => item.id !== id));
+  const handleDeleteItem = async (id: string) => {
+    try {
+      await fetchWithAuth(`/api/fridge/${id}`, {
+        method: 'DELETE',
+      });
+      setItems(items.filter(item => item.id !== id));
+    } catch (err: any) {
+      console.error('Error deleting item:', err);
+      alert(err.message || 'Failed to delete item.');
+    }
   };
 
-  const handleSaveRecipe = (recipe: RecipeSuggestion) => {
+  const handleSaveRecipe = async (recipe: RecipeSuggestion) => {
     if (savedRecipes.some(r => r.title.toLowerCase() === recipe.title.toLowerCase())) {
       return;
     }
-    const newSaved: SavedRecipe = {
-      ...recipe,
-      id: uuidv4(),
-      savedAt: new Date().toISOString()
-    };
-    setSavedRecipes([...savedRecipes, newSaved]);
+    
+    try {
+      const response = await fetchWithAuth('/api/recipes/saved', {
+        method: 'POST',
+        body: JSON.stringify(recipe),
+      });
+
+      const data = await response.json();
+      setSavedRecipes([...savedRecipes, data]);
+    } catch (err: any) {
+      console.error('Error saving recipe:', err);
+      alert(err.message || 'Failed to save recipe.');
+    }
   };
 
-  const handleDeleteSavedRecipe = (id: string) => {
-    setSavedRecipes(savedRecipes.filter(r => r.id !== id));
-    if (expandedRecipeId === id) {
-      setExpandedRecipeId(null);
+  const handleDeleteSavedRecipe = async (id: string) => {
+    try {
+      await fetchWithAuth(`/api/recipes/saved/${id}`, {
+        method: 'DELETE',
+      });
+      setSavedRecipes(savedRecipes.filter(r => r.id !== id));
+      if (expandedRecipeId === id) {
+        setExpandedRecipeId(null);
+      }
+    } catch (err: any) {
+      console.error('Error deleting saved recipe:', err);
+      alert(err.message || 'Failed to delete saved recipe.');
     }
   };
 
@@ -181,18 +301,12 @@ export default function App() {
     }));
 
     try {
-      const response = await fetch('/api/recipes', {
+      const response = await fetchWithAuth('/api/recipes', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ items: mappedItems, lang: language }),
       });
 
       const data = await response.json();
-      
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to fetch recipes');
-      }
-
       setRecipes(data.recipes);
     } catch (err: any) {
       setRecipeError(err.message || t('errRecipesFailed'));
@@ -214,6 +328,136 @@ export default function App() {
     return 'text-green-600 bg-green-50 border-green-200';
   };
 
+  // If loading user data from backend
+  if (isInitialLoading) {
+    return (
+      <div className="min-h-screen flex flex-col justify-center items-center p-4 bg-slate-50 space-y-4">
+        <Loader2 className="w-10 h-10 animate-spin text-emerald-500" />
+        <p className="text-slate-500 font-medium">{t('authLoading')}</p>
+      </div>
+    );
+  }
+
+  // If not logged in, render Signup / Signin
+  if (!user || !token) {
+    return (
+      <div className="min-h-screen flex flex-col justify-center items-center p-4 bg-gradient-to-br from-emerald-50 via-slate-50 to-indigo-50 relative overflow-hidden">
+        <div className="absolute top-10 left-10 w-72 h-72 bg-emerald-200/30 rounded-full blur-3xl" />
+        <div className="absolute bottom-10 right-10 w-96 h-96 bg-indigo-200/30 rounded-full blur-3xl" />
+        
+        <div className="absolute top-4 right-4 z-10">
+          <div className="relative inline-block text-left">
+            <select
+              value={language}
+              onChange={(e) => setLanguage(e.target.value as Language)}
+              className="appearance-none px-3 py-2 font-medium text-slate-700 bg-white border border-slate-200 rounded-lg shadow-sm hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all pr-8 cursor-pointer text-sm"
+              title="Select Language"
+            >
+              <option value="en">🇬🇧 English</option>
+              <option value="fr">🇫🇷 Français</option>
+            </select>
+            <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-500">
+              <ChevronDown className="w-4 h-4" />
+            </div>
+          </div>
+        </div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+          className="bg-white/80 backdrop-blur-md border border-slate-200/50 shadow-xl rounded-3xl p-8 max-w-md w-full z-10 space-y-6"
+        >
+          <div className="text-center space-y-2">
+            <h1 className="text-3xl font-extrabold tracking-tight text-slate-900 flex items-center justify-center gap-2">
+              <span className="text-emerald-500 flex items-center gap-1">
+                <Apple className="w-8 h-8" /> {t('brandFresh')}
+              </span>{' '}
+              {t('brandFridge')}
+            </h1>
+            <p className="text-slate-500 text-sm">{t('subtitle')}</p>
+          </div>
+
+          <div className="border-b border-slate-100 flex pb-1">
+            <button
+              onClick={() => { setIsSignUp(false); setAuthError(''); }}
+              className={`flex-1 pb-3 text-sm font-semibold border-b-2 transition-all ${
+                !isSignUp ? 'border-emerald-500 text-emerald-600' : 'border-transparent text-slate-400 hover:text-slate-600'
+              }`}
+            >
+              {t('authBtnSignIn')}
+            </button>
+            <button
+              onClick={() => { setIsSignUp(true); setAuthError(''); }}
+              className={`flex-1 pb-3 text-sm font-semibold border-b-2 transition-all ${
+                isSignUp ? 'border-emerald-500 text-emerald-600' : 'border-transparent text-slate-400 hover:text-slate-600'
+              }`}
+            >
+              {t('authBtnSignUp')}
+            </button>
+          </div>
+
+          {authError && (
+            <div className="bg-red-50 border border-red-200 text-red-700 p-3 rounded-xl text-sm flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 shrink-0" />
+              <span>{authError}</span>
+            </div>
+          )}
+
+          <form onSubmit={handleAuthSubmit} className="space-y-4">
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">
+                {t('authEmail')}
+              </label>
+              <input
+                type="email"
+                required
+                value={authEmail}
+                onChange={(e) => setAuthEmail(e.target.value)}
+                placeholder="you@example.com"
+                className="w-full px-4 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">
+                {t('authPassword')}
+              </label>
+              <input
+                type="password"
+                required
+                minLength={6}
+                value={authPassword}
+                onChange={(e) => setAuthPassword(e.target.value)}
+                placeholder="••••••••"
+                className="w-full px-4 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={isAuthLoading}
+              className="w-full py-2.5 px-4 font-semibold text-white bg-emerald-600 rounded-lg shadow-sm hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-colors mt-2"
+            >
+              {isAuthLoading && <Loader2 className="w-4 h-4 animate-spin" />}
+              {isAuthLoading ? t('authLoading') : isSignUp ? t('authBtnSignUp') : t('authBtnSignIn')}
+            </button>
+          </form>
+
+          <div className="text-center">
+            <button
+              onClick={() => { setIsSignUp(!isSignUp); setAuthError(''); }}
+              className="text-xs text-slate-500 hover:text-emerald-600 hover:underline transition-colors"
+            >
+              {isSignUp ? t('authSwitchToSignIn') : t('authSwitchToSignUp')}
+            </button>
+          </div>
+        </motion.div>
+      </div>
+    );
+  }
+
+  // Render Logged-in Dashboard
   return (
     <div className="min-h-screen p-4 md:p-8 max-w-6xl mx-auto space-y-8">
       <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -278,6 +522,14 @@ export default function App() {
             className="px-4 py-2 font-medium text-emerald-700 bg-emerald-100 rounded-lg hover:bg-emerald-200 flex items-center gap-2 transition-colors text-sm"
           >
             <Plus className="w-4 h-4" /> {t('btnAddFood')}
+          </button>
+
+          <button 
+            onClick={handleSignOut}
+            className="px-4 py-2 font-medium text-red-600 bg-red-50 hover:bg-red-100 border border-red-100 rounded-lg flex items-center gap-2 transition-all text-sm shadow-sm"
+            title={t('btnSignOut')}
+          >
+            {t('btnSignOut')}
           </button>
         </div>
       </header>

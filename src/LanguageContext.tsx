@@ -13,6 +13,7 @@ export const translations = {
     btnScanning: 'Scanning...',
     btnAiRecipes: 'AI Recipes',
     btnAddFood: 'Add Food',
+    btnSignOut: 'Sign Out',
     
     // Inventory
     titleInventory: 'Current Inventory',
@@ -60,6 +61,19 @@ export const translations = {
     btnCancel: 'Cancel',
     btnSaveItem: 'Save Item',
     
+    // Auth Form
+    authTitleSignIn: 'Welcome Back',
+    authTitleSignUp: 'Create Account',
+    authEmail: 'Email Address',
+    authPassword: 'Password',
+    authBtnSignIn: 'Sign In',
+    authBtnSignUp: 'Sign Up',
+    authSwitchToSignUp: "Don't have an account? Sign up",
+    authSwitchToSignIn: 'Already have an account? Sign in',
+    authLoading: 'Processing...',
+    authSuccessSignIn: 'Successfully signed in!',
+    authSuccessSignUp: 'Account created successfully!',
+    
     // Notifications & Errors
     errScanFailed: 'Failed to scan groceries. Please ensure the image is clear and you have configured the Gemini API key.',
     errRecipesFailed: 'Error fetching recipes. Please ensure your GEMINI_API_KEY is configured in the environment.',
@@ -74,6 +88,7 @@ export const translations = {
     btnScanning: 'Analyse...',
     btnAiRecipes: 'Recettes IA',
     btnAddFood: 'Ajouter',
+    btnSignOut: 'Déconnexion',
     
     // Inventory
     titleInventory: 'Inventaire Actuel',
@@ -120,6 +135,19 @@ export const translations = {
     labelDays: 'jours',
     btnCancel: 'Annuler',
     btnSaveItem: 'Enregistrer',
+    
+    // Auth Form
+    authTitleSignIn: 'Bon retour',
+    authTitleSignUp: 'Créer un compte',
+    authEmail: 'Adresse e-mail',
+    authPassword: 'Mot de passe',
+    authBtnSignIn: 'Se connecter',
+    authBtnSignUp: 'S\'inscrire',
+    authSwitchToSignUp: "Vous n'avez pas de compte ? S'inscrire",
+    authSwitchToSignIn: 'Déjà un compte ? Se connecter',
+    authLoading: 'Traitement en cours...',
+    authSuccessSignIn: 'Connexion réussie !',
+    authSuccessSignUp: 'Compte créé avec succès !',
     
     // Notifications & Errors
     errScanFailed: 'Échec de la numérisation des courses. Veuillez vous assurer que l\'image est claire et que la clé API Gemini est configurée.',

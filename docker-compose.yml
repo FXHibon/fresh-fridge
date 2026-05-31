@@ -1,4 +1,17 @@
 services:
+  db:
+    image: postgres:18-alpine
+    container_name: fresh-fridge-db
+    environment:
+      POSTGRES_USER: fridge_user
+      POSTGRES_PASSWORD: fridge_password
+      POSTGRES_DB: fresh_fridge
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+
   app:
     build:
       context: .
@@ -6,9 +19,15 @@ services:
     image: fresh-fridge:latest
     ports:
       - "3000:3000"
+    depends_on:
+      - db
     env_file:
       - .env
     environment:
       - PORT=3000
       - NODE_ENV=production
+      - DATABASE_URL=postgres://fridge_user:fridge_password@db:5432/fresh_fridge
     restart: unless-stopped
+
+volumes:
+  pgdata:

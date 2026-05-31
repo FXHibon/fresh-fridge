@@ -70,6 +70,9 @@ export default function App() {
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [editingExpiryDate, setEditingExpiryDate] = useState<string>('');
 
+  // Selected item IDs for recipe generation
+  const [selectedItemIds, setSelectedItemIds] = useState<string[]>([]);
+
   // Authenticated fetch helper
   const fetchWithAuth = async (url: string, options: RequestInit = {}) => {
     const activeToken = token || localStorage.getItem('fridge-token');
@@ -99,6 +102,7 @@ export default function App() {
         const invRes = await fetchWithAuth('/api/fridge');
         const invData = await invRes.json();
         setItems(invData);
+        setSelectedItemIds(invData.map((item: any) => item.id));
 
         const recRes = await fetchWithAuth('/api/recipes/saved');
         const recData = await recRes.json();
@@ -157,6 +161,7 @@ export default function App() {
     setItems([]);
     setSavedRecipes([]);
     setRecipes(null);
+    setSelectedItemIds([]);
   };
 
   const handleAddItem = async (e: React.FormEvent) => {
@@ -178,6 +183,7 @@ export default function App() {
 
       const data = await response.json();
       setItems([...items, data]);
+      setSelectedItemIds(prev => [...prev, data.id]);
       setIsAdding(false);
       setNewItemName('');
       setNewItemExpiryDays('7');
@@ -237,6 +243,7 @@ export default function App() {
         );
         
         setItems(prev => [...prev, ...savedItems]);
+        setSelectedItemIds(prev => [...prev, ...savedItems.map((item: any) => item.id)]);
       }
     } catch (error: any) {
       console.error('Error scanning groceries:', error);
@@ -252,6 +259,7 @@ export default function App() {
         method: 'DELETE',
       });
       setItems(items.filter(item => item.id !== id));
+      setSelectedItemIds(prev => prev.filter(itemId => itemId !== id));
     } catch (err: any) {
       console.error('Error deleting item:', err);
       alert(err.message || 'Failed to delete item.');
@@ -313,13 +321,14 @@ export default function App() {
   };
 
   const generateRecipes = async () => {
-    if (items.length === 0) return;
+    const selectedItems = items.filter(item => selectedItemIds.includes(item.id));
+    if (selectedItems.length === 0) return;
     
     setIsLoadingRecipes(true);
     setRecipeError('');
     setRecipes(null);
 
-    const mappedItems = items.map(item => ({
+    const mappedItems = selectedItems.map(item => ({
       name: item.name,
       daysUntilExpiry: differenceInDays(parseISO(item.expiryDate), startOfDay(new Date())),
     }));
@@ -528,7 +537,7 @@ export default function App() {
 
           <button 
             onClick={generateRecipes}
-            disabled={items.length === 0 || isLoadingRecipes}
+            disabled={selectedItemIds.length === 0 || isLoadingRecipes}
             className="px-4 py-2 font-medium text-white bg-indigo-600 rounded-lg shadow-sm hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 transition-colors text-sm"
           >
             {isLoadingRecipes ? (
@@ -538,7 +547,7 @@ export default function App() {
             ) : (
               <ChefHat className="w-4 h-4" />
             )}
-            {t('btnAiRecipes')}
+            {t('btnAiRecipes')}{selectedItemIds.length > 0 ? ` (${selectedItemIds.length})` : ''}
           </button>
           
           <button 
@@ -564,9 +573,28 @@ export default function App() {
         {/* Left Column: Inventory List */}
         <div className="lg:col-span-2 space-y-6">
           <div className="bg-white border rounded-2xl shadow-sm p-6 overflow-hidden">
-            <h2 className="text-xl font-semibold mb-6 flex items-center gap-2">
-              <Package className="w-5 h-5 text-slate-400" /> {t('titleInventory')}
-            </h2>
+            <div className="flex items-center justify-between mb-6 flex-wrap gap-4">
+              <h2 className="text-xl font-semibold flex items-center gap-2">
+                <Package className="w-5 h-5 text-slate-400" /> {t('titleInventory')}
+              </h2>
+              {items.length > 0 && (
+                <div className="flex items-center gap-3 text-xs">
+                  <button
+                    onClick={() => setSelectedItemIds(items.map(item => item.id))}
+                    className="text-slate-500 hover:text-indigo-600 transition-colors font-medium hover:underline"
+                  >
+                    {t('selectAll')}
+                  </button>
+                  <span className="text-slate-200">|</span>
+                  <button
+                    onClick={() => setSelectedItemIds([])}
+                    className="text-slate-500 hover:text-indigo-600 transition-colors font-medium hover:underline"
+                  >
+                    {t('deselectAll')}
+                  </button>
+                </div>
+              )}
+            </div>
             
             {sortedItems.length === 0 ? (
               <div className="text-center py-12 text-slate-500">
@@ -596,9 +624,34 @@ export default function App() {
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, scale: 0.95 }}
-                        className="flex items-center justify-between p-4 rounded-xl border border-slate-100 bg-slate-50/50 group hover:shadow-sm transition-all"
+                        className={`flex items-center justify-between p-4 rounded-xl border group hover:shadow-sm transition-all ${
+                          selectedItemIds.includes(item.id) 
+                            ? 'border-indigo-100 bg-indigo-50/10' 
+                            : 'border-slate-100 bg-slate-50/50'
+                        }`}
                       >
                         <div className="flex items-center gap-4">
+                          {/* Checkbox */}
+                          <button
+                            onClick={() => {
+                              setSelectedItemIds(prev => 
+                                prev.includes(item.id)
+                                  ? prev.filter(id => id !== item.id)
+                                  : [...prev, item.id]
+                              );
+                            }}
+                            className={`w-5 h-5 rounded-md border flex items-center justify-center transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500/20 shrink-0 ${
+                              selectedItemIds.includes(item.id)
+                                ? 'bg-indigo-600 border-indigo-600 text-white shadow-sm'
+                                : 'border-slate-300 hover:border-slate-400 bg-white'
+                            }`}
+                            title={selectedItemIds.includes(item.id) ? t('deselectAll') : t('selectAll')}
+                          >
+                            {selectedItemIds.includes(item.id) && (
+                              <Check className="w-3.5 h-3.5 stroke-[3]" />
+                            )}
+                          </button>
+
                           <div className={`p-3 rounded-xl ${mappedCat.bg} ${mappedCat.color}`}>
                             <Icon className="w-6 h-6" />
                           </div>

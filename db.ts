@@ -1,6 +1,8 @@
 import { Pool } from 'pg';
 import dotenv from 'dotenv';
 import { runner } from 'node-pg-migrate';
+import fs from 'fs';
+import path from 'path';
 
 dotenv.config();
 
@@ -21,6 +23,21 @@ export async function initDb() {
     const isProduction = process.env.NODE_ENV === 'production';
     const migrationsDir = isProduction ? 'dist/migrations' : 'migrations';
     
+    if (isProduction) {
+      try {
+        const dirPath = path.join(process.cwd(), 'dist/migrations');
+        if (!fs.existsSync(dirPath)) {
+          fs.mkdirSync(dirPath, { recursive: true });
+        }
+        fs.writeFileSync(
+          path.join(dirPath, 'package.json'),
+          JSON.stringify({ type: 'commonjs' })
+        );
+      } catch (err) {
+        console.warn('[DB] Failed to write migrations package.json helper:', err);
+      }
+    }
+
     await runner({
       databaseUrl: connectionString,
       dir: migrationsDir,

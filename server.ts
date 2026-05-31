@@ -327,7 +327,7 @@ app.post('/api/recipes', authMiddleware, async (req: any, res) => {
     const startTime = Date.now();
 
     const response = await ai.models.generateContent({
-      model: 'gemini-3.5-flash',
+      model: 'gemini-2.5-flash-lite',
       contents: prompt,
       config: {
         responseMimeType: 'application/json',
@@ -377,7 +377,7 @@ app.post('/api/scan-groceries', authMiddleware, async (req: any, res) => {
     const startTime = Date.now();
 
     const response = await ai.models.generateContent({
-      model: 'gemini-3.5-flash',
+      model: 'gemini-2.5-flash-lite',
       contents: [
         {
           inlineData: {

@@ -297,22 +297,24 @@ app.post('/api/recipes', authMiddleware, async (req: any, res) => {
 
     const prompt = isFrench
       ? `J'ai les ingrédients suivants dans mon réfrigérateur : ${ingredientsList}.
-    Suggère 3 recettes simples et délicieuses que je peux préparer pour utiliser ces ingrédients, en donnant la priorité à ceux qui expirent le plus tôt.
+    Tu peux également supposer que j'ai quelques ingrédients de base dans mon garde-manger : oignons, ail, huile d'olive, huile végétale, sel, poivre, sucre, riz, pâtes, eau et farine. Utilise-les si nécessaire pour concevoir les recettes.
+    Suggère 3 recettes simples et délicieuses que je peux préparer en utilisant ces ingrédients, en donnant la priorité à ceux du réfrigérateur qui expirent le plus tôt.
     Retourne la réponse sous la forme d'un objet JSON valide avec une seule clé "recipes" contenant un tableau d'objets.
     Chaque objet doit avoir :
     - "title" (chaîne de caractères - titre de la recette en français)
     - "description" (chaîne de caractères - description en français)
-    - "ingredientsUsed" (tableau de chaînes de caractères - ingrédients utilisés de la liste ci-dessus en français)
+    - "ingredientsUsed" (tableau de chaînes de caractères - ingrédients utilisés du réfrigérateur et du garde-manger en français)
     - "instructions" (tableau de chaînes de caractères - instructions étape par étape en français)
     - "difficulty" (chaîne de caractères : "Easy", "Medium", ou "Hard" uniquement. N'utilise pas d'autres valeurs ni de traduction pour cette clé)
     N'inclus pas de formatage markdown ou de guillemets inversés (backticks) autour du JSON. Renvoie UNIQUEMENT la chaîne JSON brute.`
       : `I have the following ingredients in my fridge: ${ingredientsList}. 
-    Suggest 3 simple, delicious recipes I can make to use up these ingredients, prioritizing the ones that expire soonest.
+    You can also assume I have standard kitchen pantry staples available: onions, garlic, olive oil, vegetable oil, salt, pepper, sugar, rice, pasta, water, and flour. Use them as needed to construct the recipes.
+    Suggest 3 simple, delicious recipes I can make using these ingredients, prioritizing the items in the fridge that expire soonest.
     Return the response as a valid JSON object with a single key "recipes" containing an array of objects.
     Each object should have:
     - "title" (string)
     - "description" (string)
-    - "ingredientsUsed" (array of strings)
+    - "ingredientsUsed" (array of strings - listing all ingredients used from both the fridge and the pantry staples)
     - "instructions" (array of strings)
     - "difficulty" (string: Easy, Medium, Hard)
     Do not include markdown formatting or backticks around the JSON. Return ONLY the raw JSON string.`;

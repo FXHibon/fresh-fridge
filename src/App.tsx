@@ -404,7 +404,7 @@ export default function App() {
           <div className="text-center space-y-2">
             <h1 className="text-3xl font-extrabold tracking-tight text-slate-900 flex items-center justify-center gap-2">
               <span className="text-emerald-500 flex items-center gap-1">
-                <Apple className="w-8 h-8" /> {t('brandFresh')}
+                <img src="/logo.png" alt="Fresh Fridge Logo" className="w-8 h-8 object-contain" /> {t('brandFresh')}
               </span>{' '}
               {t('brandFridge')}
             </h1>
@@ -496,6 +496,7 @@ export default function App() {
       <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-slate-900 flex items-center gap-2">
+            <img src="/logo.png" alt="Fresh Fridge Logo" className="w-8 h-8 object-contain" />
             <span className="text-emerald-500">{t('brandFresh')}</span> {t('brandFridge')}
           </h1>
           <p className="text-slate-500 mt-1">{t('subtitle')}</p>

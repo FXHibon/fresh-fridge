@@ -12,6 +12,7 @@ RUN npm ci
 # Copy configuration and source files
 COPY tsconfig.json vite.config.ts index.html db.ts ./
 COPY src/ ./src
+COPY public/ ./public
 COPY migrations/ ./migrations
 COPY server.ts ./
 

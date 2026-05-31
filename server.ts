@@ -359,11 +359,12 @@ app.post('/api/scan-groceries', authMiddleware, async (req: any, res) => {
     const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
     const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, '');
 
+    const todayStr = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
     const prompt = `Analyze this image of groceries. Identify all the food/grocery items visible.
     For each item, provide:
     1. A clear product name.
     2. The most appropriate category from this exact list: ["Produce", "Dairy", "Meat", "Pantry", "Other"].
-    3. An estimate of how many days until it expires (an integer number).
+    3. The number of days until it expires. First, look extremely closely at the packaging in the image to read any printed expiration date (e.g. "EXP", "Best Before", "A consommer de préférence avant", "Date limite de consommation", etc.). Calculate the number of days from today (${todayStr}) until that printed expiration date. If you cannot find or read any printed expiration date on the item in the image, then make a sensible estimate of how many days it will stay fresh.
     
     Return the response as a valid JSON object with a single key "items" containing an array of objects.
     Each object should have:

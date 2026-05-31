@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { v4 as uuidv4 } from 'uuid';
-import { differenceInDays, parseISO, format, formatDistanceToNow, addDays, isPast, startOfDay } from 'date-fns';
+import { differenceInDays, parseISO, format, addDays, startOfDay } from 'date-fns';
 import { 
-  Apple, Carrot, Milk, Beef, Wheat, Package, 
+  Apple, Milk, Beef, Wheat, Package, 
   Plus, Trash2, X, Sparkles, ChefHat, AlertTriangle, Info, Camera, Loader2,
   Bookmark, ChevronDown, ChevronUp
 } from 'lucide-react';
 import { FoodItem, RecipeSuggestion, SavedRecipe } from './types';
 import { motion, AnimatePresence } from 'motion/react';
+import { useLanguage, Language, translations } from './LanguageContext';
 
 const CATEGORIES = [
   { name: 'Produce', icon: Apple, color: 'text-green-500', bg: 'bg-green-100' },
@@ -17,7 +18,19 @@ const CATEGORIES = [
   { name: 'Other', icon: Package, color: 'text-slate-500', bg: 'bg-slate-100' },
 ];
 
+const getCategoryTranslationKey = (name: string): keyof typeof translations.en => {
+  switch (name) {
+    case 'Produce': return 'catProduce';
+    case 'Dairy': return 'catDairy';
+    case 'Meat': return 'catMeat';
+    case 'Pantry': return 'catPantry';
+    default: return 'catOther';
+  }
+};
+
 export default function App() {
+  const { language, setLanguage, t, dateLocale } = useLanguage();
+
   const [items, setItems] = useState<FoodItem[]>(() => {
     try {
       const saved = localStorage.getItem('fridge-items');
@@ -126,7 +139,7 @@ export default function App() {
       }
     } catch (error) {
       console.error('Error scanning groceries:', error);
-      alert('Failed to scan groceries. Please ensure the image is clear and you have configured the Gemini API key.');
+      alert(t('errScanFailed'));
     } finally {
       setIsScanning(false);
     }
@@ -171,7 +184,7 @@ export default function App() {
       const response = await fetch('/api/recipes', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ items: mappedItems }),
+        body: JSON.stringify({ items: mappedItems, lang: language }),
       });
 
       const data = await response.json();
@@ -182,7 +195,7 @@ export default function App() {
 
       setRecipes(data.recipes);
     } catch (err: any) {
-      setRecipeError(err.message || 'Error fetching recipes. Please ensure your GEMINI_API_KEY is configured in the environment.');
+      setRecipeError(err.message || t('errRecipesFailed'));
     } finally {
       setIsLoadingRecipes(false);
     }
@@ -206,12 +219,27 @@ export default function App() {
       <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-slate-900 flex items-center gap-2">
-            <span className="text-emerald-500">Fresh</span> Fridge
+            <span className="text-emerald-500">{t('brandFresh')}</span> {t('brandFridge')}
           </h1>
-          <p className="text-slate-500 mt-1">Track expiry dates and minimize food waste.</p>
+          <p className="text-slate-500 mt-1">{t('subtitle')}</p>
         </div>
         
-        <div className="flex flex-wrap gap-2 md:gap-3">
+        <div className="flex flex-wrap gap-2 md:gap-3 items-center">
+          <div className="relative inline-block text-left">
+            <select
+              value={language}
+              onChange={(e) => setLanguage(e.target.value as Language)}
+              className="appearance-none px-3 py-2 font-medium text-slate-700 bg-white border border-slate-200 rounded-lg shadow-sm hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all pr-8 cursor-pointer text-sm"
+              title="Select Language"
+            >
+              <option value="en">🇬🇧 English</option>
+              <option value="fr">🇫🇷 Français</option>
+            </select>
+            <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-500">
+              <ChevronDown className="w-4 h-4" />
+            </div>
+          </div>
+
           <input 
             type="file" 
             accept="image/*" 
@@ -224,16 +252,16 @@ export default function App() {
           <button 
             onClick={handleScanClick}
             disabled={isScanning}
-            className="px-4 py-2 font-medium text-slate-700 bg-white border border-slate-200 rounded-lg shadow-sm hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 transition-colors"
+            className="px-4 py-2 font-medium text-slate-700 bg-white border border-slate-200 rounded-lg shadow-sm hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 transition-colors text-sm"
           >
             {isScanning ? <Loader2 className="w-4 h-4 animate-spin" /> : <Camera className="w-4 h-4" />}
-            {isScanning ? 'Scanning...' : 'Scan'}
+            {isScanning ? t('btnScanning') : t('btnScan')}
           </button>
 
           <button 
             onClick={generateRecipes}
             disabled={items.length === 0 || isLoadingRecipes}
-            className="px-4 py-2 font-medium text-white bg-indigo-600 rounded-lg shadow-sm hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 transition-colors"
+            className="px-4 py-2 font-medium text-white bg-indigo-600 rounded-lg shadow-sm hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 transition-colors text-sm"
           >
             {isLoadingRecipes ? (
               <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1, ease: "linear" }}>
@@ -242,14 +270,14 @@ export default function App() {
             ) : (
               <ChefHat className="w-4 h-4" />
             )}
-            AI Recipes
+            {t('btnAiRecipes')}
           </button>
           
           <button 
             onClick={() => setIsAdding(true)}
-            className="px-4 py-2 font-medium text-emerald-700 bg-emerald-100 rounded-lg hover:bg-emerald-200 flex items-center gap-2 transition-colors"
+            className="px-4 py-2 font-medium text-emerald-700 bg-emerald-100 rounded-lg hover:bg-emerald-200 flex items-center gap-2 transition-colors text-sm"
           >
-            <Plus className="w-4 h-4" /> Add Food
+            <Plus className="w-4 h-4" /> {t('btnAddFood')}
           </button>
         </div>
       </header>
@@ -261,15 +289,15 @@ export default function App() {
         <div className="lg:col-span-2 space-y-6">
           <div className="bg-white border rounded-2xl shadow-sm p-6 overflow-hidden">
             <h2 className="text-xl font-semibold mb-6 flex items-center gap-2">
-              <Package className="w-5 h-5 text-slate-400" /> Current Inventory
+              <Package className="w-5 h-5 text-slate-400" /> {t('titleInventory')}
             </h2>
             
             {sortedItems.length === 0 ? (
               <div className="text-center py-12 text-slate-500">
                 <Package className="w-12 h-12 mx-auto text-slate-300 mb-4" />
-                <p>Your fridge is empty!</p>
+                <p>{t('emptyFridge')}</p>
                 <button onClick={() => setIsAdding(true)} className="text-emerald-600 font-medium hover:underline mt-2">
-                  Add some items
+                  {t('addSomeItems')}
                 </button>
               </div>
             ) : (
@@ -279,7 +307,11 @@ export default function App() {
                     const mappedCat = CATEGORIES.find(c => c.name === item.category) || CATEGORIES[4];
                     const Icon = mappedCat.icon;
                     const days = differenceInDays(parseISO(item.expiryDate), startOfDay(new Date()));
-                    const urgency = days < 0 ? 'Expired' : days === 0 ? 'Expires Today' : `Expires in ${days} day${days === 1 ? '' : 's'}`;
+                    const urgency = days < 0 
+                      ? t('expired') 
+                      : days === 0 
+                        ? t('expiryToday') 
+                        : t(days === 1 ? 'expiryDay' : 'expiryDays', { days });
 
                     return (
                       <motion.div
@@ -301,7 +333,7 @@ export default function App() {
                                 {urgency}
                               </span>
                               <span className="text-xs text-slate-400">
-                                {format(parseISO(item.expiryDate), 'MMM do')}
+                                {format(parseISO(item.expiryDate), language === 'fr' ? 'd MMM' : 'MMM do', { locale: dateLocale })}
                               </span>
                             </div>
                           </div>
@@ -309,7 +341,7 @@ export default function App() {
                         <button 
                           onClick={() => handleDeleteItem(item.id)}
                           className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
-                          title="Remove item"
+                          title={t('btnRemoveItem')}
                         >
                           <Trash2 className="w-5 h-5" />
                         </button>
@@ -324,14 +356,14 @@ export default function App() {
           {/* Saved Recipes Panel */}
           <div className="bg-white border rounded-2xl shadow-sm p-6 overflow-hidden">
             <h2 className="text-xl font-semibold mb-6 flex items-center gap-2">
-              <ChefHat className="w-5 h-5 text-indigo-500" /> Saved Recipes
+              <ChefHat className="w-5 h-5 text-indigo-500" /> {t('titleSavedRecipes')}
             </h2>
             
             {savedRecipes.length === 0 ? (
               <div className="text-center py-10 text-slate-500">
                 <ChefHat className="w-12 h-12 mx-auto text-slate-300 mb-3" />
-                <p>No saved recipes yet.</p>
-                <p className="text-xs text-slate-400 mt-1">Generate recipes on the right and click the bookmark icon to save them!</p>
+                <p>{t('emptySavedRecipes')}</p>
+                <p className="text-xs text-slate-400 mt-1">{t('savedRecipesInstruction')}</p>
               </div>
             ) : (
               <div className="grid gap-3">
@@ -357,7 +389,9 @@ export default function App() {
                               recipe.difficulty === 'Medium' ? 'bg-amber-100 text-amber-700' :
                               'bg-red-100 text-red-700'
                             }`}>
-                              {recipe.difficulty}
+                              {recipe.difficulty === 'Easy' ? t('difficultyEasy') :
+                               recipe.difficulty === 'Medium' ? t('difficultyMedium') :
+                               t('difficultyHard')}
                             </span>
                             <h3 className="font-semibold text-slate-900">{recipe.title}</h3>
                           </div>
@@ -368,7 +402,7 @@ export default function App() {
                                 handleDeleteSavedRecipe(recipe.id);
                               }}
                               className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                              title="Delete saved recipe"
+                              title={t('btnDeleteSavedRecipe')}
                             >
                               <Trash2 className="w-4 h-4" />
                             </button>
@@ -385,7 +419,7 @@ export default function App() {
                             <p className="text-sm text-slate-600">{recipe.description}</p>
                             
                             <div>
-                              <h4 className="text-xs font-semibold text-slate-900 uppercase tracking-wider mb-2">Used ingredients:</h4>
+                              <h4 className="text-xs font-semibold text-slate-900 uppercase tracking-wider mb-2">{t('usedIngredients')}</h4>
                               <div className="flex flex-wrap gap-1">
                                 {recipe.ingredientsUsed.map((ing, i) => (
                                   <span key={i} className="text-xs bg-slate-100 text-slate-700 px-2 py-1 rounded-md">
@@ -397,7 +431,7 @@ export default function App() {
                             
                             <div>
                               <h4 className="text-xs font-semibold text-slate-900 uppercase tracking-wider mb-2 flex items-center gap-1">
-                                <Info className="w-3 h-3 text-slate-400" /> Instructions:
+                                <Info className="w-3 h-3 text-slate-400" /> {t('instructions')}
                               </h4>
                               <ol className="list-decimal list-inside space-y-1">
                                 {recipe.instructions.map((step, i) => (
@@ -422,10 +456,10 @@ export default function App() {
         <div className="space-y-6">
           <div className="bg-indigo-50/50 border border-indigo-100 rounded-2xl p-6 shadow-sm">
             <h2 className="text-xl font-semibold mb-2 flex items-center gap-2 text-indigo-900">
-              <ChefHat className="w-5 h-5" /> Recipe Suggestions
+              <ChefHat className="w-5 h-5" /> {t('titleSuggestions')}
             </h2>
             <p className="text-sm text-indigo-700/70 mb-6">
-              AI suggests what to cook to minimize waste based on items expiring soon.
+              {t('subtitleSuggestions')}
             </p>
 
             {recipeError && (
@@ -438,7 +472,7 @@ export default function App() {
             {!recipes && !isLoadingRecipes && !recipeError && (
               <div className="text-center py-8">
                 <Sparkles className="w-8 h-8 text-indigo-300 mx-auto mb-3" />
-                <p className="text-sm text-indigo-600 font-medium pb-2">Click "AI Recipes" to generate ideas.</p>
+                <p className="text-sm text-indigo-600 font-medium pb-2">{t('suggestionsInstruction')}</p>
               </div>
             )}
 
@@ -472,7 +506,9 @@ export default function App() {
                           recipe.difficulty === 'Medium' ? 'bg-amber-100 text-amber-700' :
                           'bg-red-100 text-red-700'
                         }`}>
-                          {recipe.difficulty}
+                          {recipe.difficulty === 'Easy' ? t('difficultyEasy') :
+                           recipe.difficulty === 'Medium' ? t('difficultyMedium') :
+                           t('difficultyHard')}
                         </span>
                         
                         {(() => {
@@ -486,7 +522,7 @@ export default function App() {
                                   ? 'text-indigo-600 bg-indigo-50 cursor-default' 
                                   : 'text-slate-400 hover:text-indigo-600 hover:bg-slate-50'
                               }`}
-                              title={isSaved ? "Saved to Recipes" : "Save Recipe"}
+                              title={isSaved ? t('btnSavedToRecipes') : t('btnSaveRecipe')}
                             >
                               <Bookmark className={`w-4 h-4 ${isSaved ? 'fill-indigo-600' : ''}`} />
                             </button>
@@ -498,7 +534,7 @@ export default function App() {
                     <p className="text-sm text-slate-600 mb-4">{recipe.description}</p>
                     
                     <div className="mb-4">
-                      <h4 className="text-xs font-semibold text-slate-900 uppercase tracking-wider mb-2">Uses these ingredients:</h4>
+                      <h4 className="text-xs font-semibold text-slate-900 uppercase tracking-wider mb-2">{t('usesIngredients')}</h4>
                       <div className="flex flex-wrap gap-1">
                         {recipe.ingredientsUsed.map((ing, i) => (
                           <span key={i} className="text-xs bg-slate-100 text-slate-700 px-2 py-1 rounded-md">
@@ -510,7 +546,7 @@ export default function App() {
 
                     <div>
                       <h4 className="text-xs font-semibold text-slate-900 uppercase tracking-wider mb-2 flex items-center gap-1">
-                        <Info className="w-3 h-3 text-slate-400" /> Instructions:
+                        <Info className="w-3 h-3 text-slate-400" /> {t('instructions')}
                       </h4>
                       <ol className="list-decimal list-inside space-y-1">
                         {recipe.instructions.map((step, i) => (
@@ -539,7 +575,7 @@ export default function App() {
               className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden"
             >
               <div className="flex justify-between items-center p-6 bg-slate-50 border-b border-slate-100">
-                <h3 className="text-lg font-semibold text-slate-900">Add to Fridge</h3>
+                <h3 className="text-lg font-semibold text-slate-900">{t('modalTitle')}</h3>
                 <button onClick={() => setIsAdding(false)} className="text-slate-400 hover:text-slate-600">
                   <X className="w-5 h-5" />
                 </button>
@@ -547,20 +583,20 @@ export default function App() {
               
               <form onSubmit={handleAddItem} className="p-6 space-y-5">
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Item Name</label>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">{t('labelItemName')}</label>
                   <input
                     type="text"
                     required
                     value={newItemName}
                     onChange={(e) => setNewItemName(e.target.value)}
-                    placeholder="e.g. Greek Yogurt"
+                    placeholder={t('placeholderItemName')}
                     className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
                     autoFocus
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Category</label>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">{t('labelCategory')}</label>
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
                     {CATEGORIES.map(cat => (
                       <button
@@ -574,14 +610,14 @@ export default function App() {
                         }`}
                       >
                         <cat.icon className="w-4 h-4" />
-                        {cat.name}
+                        {t(getCategoryTranslationKey(cat.name))}
                       </button>
                     ))}
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Expires in (days)</label>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">{t('labelExpiresIn')}</label>
                   <div className="flex items-center gap-3">
                     <input
                       type="number"
@@ -591,7 +627,7 @@ export default function App() {
                       onChange={(e) => setNewItemExpiryDays(e.target.value)}
                       className="w-24 px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
                     />
-                    <span className="text-sm text-slate-500">days</span>
+                    <span className="text-sm text-slate-500">{t('labelDays')}</span>
                   </div>
                 </div>
 
@@ -601,13 +637,13 @@ export default function App() {
                     onClick={() => setIsAdding(false)}
                     className="px-4 py-2 text-slate-600 font-medium hover:bg-slate-100 rounded-lg transition-colors"
                   >
-                    Cancel
+                    {t('btnCancel')}
                   </button>
                   <button
                     type="submit"
                     className="px-4 py-2 font-medium text-white bg-emerald-600 rounded-lg shadow-sm hover:bg-emerald-700 transition-colors"
                   >
-                    Save Item
+                    {t('btnSaveItem')}
                   </button>
                 </div>
               </form>
@@ -618,4 +654,3 @@ export default function App() {
     </div>
   );
 }
-

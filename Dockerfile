@@ -10,8 +10,9 @@ COPY package.json package-lock.json ./
 RUN npm ci
 
 # Copy configuration and source files
-COPY tsconfig.json vite.config.ts index.html ./
+COPY tsconfig.json vite.config.ts index.html db.ts ./
 COPY src/ ./src
+COPY migrations/ ./migrations
 COPY server.ts ./
 
 # Build the frontend and compile the backend server

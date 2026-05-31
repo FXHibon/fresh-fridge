@@ -204,6 +204,30 @@ app.delete('/api/fridge/:id', authMiddleware, async (req: any, res) => {
   }
 });
 
+app.patch('/api/fridge/:id', authMiddleware, async (req: any, res) => {
+  try {
+    const { id } = req.params;
+    const { expiryDate } = req.body;
+    if (!expiryDate) {
+      return res.status(400).json({ error: 'expiryDate is required.' });
+    }
+
+    const result = await pool.query(
+      'UPDATE fridge_items SET expiry_date = $1 WHERE id = $2 AND user_id = $3 RETURNING id, name, category, added_date AS "addedDate", expiry_date AS "expiryDate"',
+      [expiryDate, id, req.userId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Item not found or unauthorized.' });
+    }
+
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error('Error updating fridge item expiry date:', err);
+    res.status(500).json({ error: 'Failed to update fridge item.' });
+  }
+});
+
 // Secure Saved Recipe Routes
 app.get('/api/recipes/saved', authMiddleware, async (req: any, res) => {
   try {

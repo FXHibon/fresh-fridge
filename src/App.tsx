@@ -4,7 +4,7 @@ import { differenceInDays, parseISO, format, addDays, startOfDay } from 'date-fn
 import { 
   Apple, Milk, Beef, Wheat, Package, 
   Plus, Trash2, X, Sparkles, ChefHat, AlertTriangle, Info, Camera, Loader2,
-  Bookmark, ChevronDown, ChevronUp
+  Bookmark, ChevronDown, ChevronUp, Calendar, Check
 } from 'lucide-react';
 import { FoodItem, RecipeSuggestion, SavedRecipe } from './types';
 import { motion, AnimatePresence } from 'motion/react';
@@ -65,6 +65,10 @@ export default function App() {
   const [isScanning, setIsScanning] = useState(false);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   const [expandedRecipeId, setExpandedRecipeId] = useState<string | null>(null);
+
+  // Edit item expiry state
+  const [editingItemId, setEditingItemId] = useState<string | null>(null);
+  const [editingExpiryDate, setEditingExpiryDate] = useState<string>('');
 
   // Authenticated fetch helper
   const fetchWithAuth = async (url: string, options: RequestInit = {}) => {
@@ -251,6 +255,26 @@ export default function App() {
     } catch (err: any) {
       console.error('Error deleting item:', err);
       alert(err.message || 'Failed to delete item.');
+    }
+  };
+
+  const handleUpdateExpiryDate = async (id: string, newExpiryDate: string) => {
+    try {
+      const response = await fetchWithAuth(`/api/fridge/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ expiryDate: newExpiryDate }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to update expiry date');
+      }
+
+      const updatedItem = await response.json();
+      setItems(items.map(item => item.id === id ? updatedItem : item));
+      setEditingItemId(null);
+    } catch (err: any) {
+      console.error('Error updating item expiry date:', err);
+      alert(err.message || 'Failed to update expiry date.');
     }
   };
 
@@ -584,19 +608,63 @@ export default function App() {
                               <span className={`text-xs font-medium px-2 py-0.5 rounded-full border ${getStatusColor(item.expiryDate)}`}>
                                 {urgency}
                               </span>
-                              <span className="text-xs text-slate-400">
-                                {format(parseISO(item.expiryDate), language === 'fr' ? 'd MMM' : 'MMM do', { locale: dateLocale })}
-                              </span>
+                              {editingItemId === item.id ? (
+                                <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                                  <input
+                                    type="date"
+                                    value={editingExpiryDate ? editingExpiryDate.substring(0, 10) : ''}
+                                    onChange={(e) => {
+                                      if (e.target.value) {
+                                        const dateVal = new Date(e.target.value + 'T12:00:00');
+                                        setEditingExpiryDate(dateVal.toISOString());
+                                      }
+                                    }}
+                                    className="text-xs border border-slate-200 rounded px-1.5 py-0.5 outline-none focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500 bg-white font-medium text-slate-700 shadow-sm"
+                                  />
+                                  <button
+                                    onClick={() => handleUpdateExpiryDate(item.id, editingExpiryDate)}
+                                    className="p-1 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 rounded transition-colors"
+                                    title={t('btnSaveItem')}
+                                  >
+                                    <Check className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button
+                                    onClick={() => setEditingItemId(null)}
+                                    className="p-1 text-slate-400 hover:text-slate-500 hover:bg-slate-100 rounded transition-colors"
+                                    title={t('btnCancel')}
+                                  >
+                                    <X className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              ) : (
+                                <span className="text-xs text-slate-400">
+                                  {format(parseISO(item.expiryDate), language === 'fr' ? 'd MMM' : 'MMM do', { locale: dateLocale })}
+                                </span>
+                              )}
                             </div>
                           </div>
                         </div>
-                        <button 
-                          onClick={() => handleDeleteItem(item.id)}
-                          className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
-                          title={t('btnRemoveItem')}
-                        >
-                          <Trash2 className="w-5 h-5" />
-                        </button>
+                        <div className="flex items-center gap-1">
+                          {editingItemId !== item.id && (
+                            <button 
+                              onClick={() => {
+                                setEditingItemId(item.id);
+                                setEditingExpiryDate(item.expiryDate);
+                              }}
+                              className="p-2 text-slate-400 hover:text-emerald-500 hover:bg-emerald-50 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
+                              title={t('btnEditExpiry')}
+                            >
+                              <Calendar className="w-5 h-5" />
+                            </button>
+                          )}
+                          <button 
+                            onClick={() => handleDeleteItem(item.id)}
+                            className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
+                            title={t('btnRemoveItem')}
+                          >
+                            <Trash2 className="w-5 h-5" />
+                          </button>
+                        </div>
                       </motion.div>
                     );
                   })}

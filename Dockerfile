@@ -1,5 +1,5 @@
 # Stage 1: Build stage
-FROM node:20-alpine AS builder
+FROM node:24-alpine AS builder
 
 WORKDIR /usr/src/app
 
@@ -19,7 +19,7 @@ COPY server.ts ./
 RUN npm run build
 
 # Stage 2: Production runner stage
-FROM node:20-alpine AS runner
+FROM node:24-alpine AS runner
 
 WORKDIR /usr/src/app
 

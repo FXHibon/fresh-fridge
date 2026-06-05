@@ -3,20 +3,6 @@
 
 version: 2
 updates:
-  # Enable version updates for GitHub Actions
-  - package-ecosystem: "github-actions"
-    directory: "/"
-    schedule:
-      interval: "daily"
-      time: "09:00"
-      timezone: "Europe/Paris"
-    open-pull-requests-limit: 5
-    # Group all GitHub Actions updates together to minimize pull request noise
-    groups:
-      github-actions-dependencies:
-        patterns:
-          - "*"
-
   - package-ecosystem: "docker"
     directory: "/"
     schedule:

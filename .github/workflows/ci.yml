@@ -9,7 +9,7 @@ on:
   pull_request:
     branches:
       - master
-
+  workflow_dispatch:
 # Limit permissions to what is needed
 permissions:
   contents: read

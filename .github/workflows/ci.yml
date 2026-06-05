@@ -16,7 +16,7 @@ permissions:
 
 jobs:
   docker-build:
-    uses: fxhibon/iac/.github/workflows/docker-build-push.yml@master
+    uses: FXHibon/iac/.github/workflows/docker-build-push.yml@master
     secrets:
       dockerhub_username: ${{ secrets.DOCKERHUB_USERNAME }}
       dockerhub_token: ${{ secrets.DOCKERHUB_TOKEN }}
